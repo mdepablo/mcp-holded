@@ -88,14 +88,15 @@ describe('HoldedClient', () => {
       await expect(client.get('/contacts')).rejects.toThrow('Holded API error (401): Unauthorized');
     });
 
-    it('enriches 403 errors with a scope hint', async () => {
+    it('enriches 403 errors with a hint containing "invalid" and "scope"', async () => {
       mockFetch.mockResolvedValueOnce({
         ok: false,
         status: 403,
         text: async () => 'Forbidden',
       });
-
-      await expect(client.get('/salary-records')).rejects.toThrow(/scope/);
+      const err = (await client.get('/salary-records').catch((e) => e)) as Error;
+      expect(err.message).toMatch(/invalid/);
+      expect(err.message).toMatch(/scope/);
     });
   });
 
@@ -194,6 +195,80 @@ describe('HoldedClient', () => {
           body: expect.anything(),
         })
       );
+    });
+  });
+
+  describe('getBinary', () => {
+    it('returns base64, contentType and bytes from a binary response', async () => {
+      const buf = new Uint8Array([1, 2, 3]).buffer;
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        headers: { get: () => 'application/pdf' },
+        arrayBuffer: async () => buf,
+      });
+      const result = await (client as any).getBinary('/invoices/doc-1/pdf');
+      expect(result.contentType).toBe('application/pdf');
+      expect(result.base64).toBe(Buffer.from(new Uint8Array([1, 2, 3])).toString('base64'));
+      expect(result.bytes).toBe(3);
+    });
+
+    it('falls back to application/octet-stream when content-type header is absent', async () => {
+      const buf = new Uint8Array([65]).buffer;
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        headers: { get: () => null },
+        arrayBuffer: async () => buf,
+      });
+      const result = await (client as any).getBinary('/invoices/doc-1/pdf');
+      expect(result.contentType).toBe('application/octet-stream');
+    });
+
+    it('throws with standard Holded error format on non-OK response', async () => {
+      mockFetch.mockResolvedValueOnce({
+        ok: false,
+        status: 404,
+        text: async () => 'Not Found',
+      });
+      await expect((client as any).getBinary('/invoices/fake/pdf')).rejects.toThrow(
+        'Holded API error (404): Not Found'
+      );
+    });
+
+    it('includes hint with "invalid" and "scope" on 403 response', async () => {
+      mockFetch.mockResolvedValueOnce({
+        ok: false,
+        status: 403,
+        text: async () => 'Forbidden',
+      });
+      const err = await (client as any).getBinary('/invoices/doc-1/pdf').catch((e: Error) => e);
+      expect(err.message).toMatch(/invalid/);
+      expect(err.message).toMatch(/scope/);
+    });
+  });
+
+  describe('error body truncation', () => {
+    it('truncates a 4000-char error body to 500 chars with … [truncated] suffix', async () => {
+      const longBody = 'x'.repeat(4000);
+      mockFetch.mockResolvedValueOnce({
+        ok: false,
+        status: 400,
+        text: async () => longBody,
+      });
+      const err = (await client.get('/contacts').catch((e) => e)) as Error;
+      expect(err.message).toMatch(/… \[truncated\]$/);
+      expect(err.message.length).toBeLessThanOrEqual(600);
+    });
+
+    it('does not truncate a short error body', async () => {
+      const shortBody = 'Short error message';
+      mockFetch.mockResolvedValueOnce({
+        ok: false,
+        status: 400,
+        text: async () => shortBody,
+      });
+      const err = (await client.get('/contacts').catch((e) => e)) as Error;
+      expect(err.message).not.toContain('[truncated]');
+      expect(err.message).toContain(shortBody);
     });
   });
 
