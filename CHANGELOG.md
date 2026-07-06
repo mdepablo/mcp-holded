@@ -1,3 +1,10 @@
+## [2.0.1](https://github.com/nubiia-dev/mcp-holded/compare/v2.0.0...v2.0.1) (2026-07-06)
+
+
+### Bug Fixes
+
+* PDF binary responses, real payment date filters, clearer errors ([#94](https://github.com/nubiia-dev/mcp-holded/issues/94)) ([d4b6cfa](https://github.com/nubiia-dev/mcp-holded/commit/d4b6cfa4ef06e63a61dc5e987ddba447f7582bbe))
+
 # [2.0.0](https://github.com/nubiia-dev/mcp-holded/compare/v1.8.0...v2.0.0) (2026-07-06)
 
 
