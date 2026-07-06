@@ -23,6 +23,9 @@ import { getWarehouseTools } from './tools/warehouses.js';
 import { getTimeTrackingTools } from './tools/time-tracking.js';
 import { getAccountingTools } from './tools/accounting.js';
 import { getBankingTools } from './tools/banking.js';
+import { getTeamTools } from './tools/team.js';
+import { getLedgerTools } from './tools/ledger.js';
+import { getTreasuryV2Tools } from './tools/treasury-v2.js';
 
 // Initialize multi-tenancy support
 const tenantConfigs = loadTenantConfigs();
@@ -63,12 +66,28 @@ const rateLimiter = new RateLimiter({
     list_project_times_by_project: { maxRequests: 60, windowMs: 60000 },
     get_daily_ledger: { maxRequests: 60, windowMs: 60000 },
     get_chart_of_accounts: { maxRequests: 60, windowMs: 60000 },
+    // v2 write/destructive operations
+    create_employee: { maxRequests: 20, windowMs: 60000 },
+    delete_employee: { maxRequests: 10, windowMs: 60000 },
+    create_salary_record: { maxRequests: 20, windowMs: 60000 },
+    delete_salary_record: { maxRequests: 10, windowMs: 60000 },
+    create_ledger_entry: { maxRequests: 20, windowMs: 60000 },
+    create_bank_movement: { maxRequests: 20, windowMs: 60000 },
+    delete_bank_account: { maxRequests: 10, windowMs: 60000 },
   },
 });
 
 // Experimental bank-feed reconciliation hits an undocumented internal Holded API
 // and performs a write. It is opt-in: set HOLDED_ENABLE_EXPERIMENTAL_BANKING=true.
 const EXPERIMENTAL_BANKING_ENABLED = process.env.HOLDED_ENABLE_EXPERIMENTAL_BANKING === 'true';
+
+// ListTools uses allTools (built once from the default client). To avoid hiding
+// v2 tools when only a non-default tenant has a v2 key, we gate listing on
+// whether ANY tenant has v2 configured. CallTool rebuilds tools per-tenant and
+// registers v2 tools unconditionally so the client's buildHeaders surfaces the
+// "HOLDED_API_KEY_V2 not configured" error on misconfigured tenants instead of
+// the generic "Unknown tool" error.
+const ANY_TENANT_HAS_V2 = tenantConfigs.some((c) => Boolean(c.apiKeyV2));
 
 // Collect all tools
 const allTools = {
@@ -88,6 +107,11 @@ const allTools = {
   ...getTimeTrackingTools(client),
   ...getAccountingTools(client),
   ...(EXPERIMENTAL_BANKING_ENABLED ? getBankingTools(client) : {}),
+  // API v2 tools: listed when any tenant has a v2 key configured
+  // (HOLDED_API_KEY_V2 / TENANT_N_API_KEY_V2). Existing v1-only users see no change.
+  ...(ANY_TENANT_HAS_V2 ? getTeamTools(client) : {}),
+  ...(ANY_TENANT_HAS_V2 ? getLedgerTools(client) : {}),
+  ...(ANY_TENANT_HAS_V2 ? getTreasuryV2Tools(client) : {}),
 };
 
 // Create server
@@ -175,6 +199,12 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
     ...getTimeTrackingTools(tenantContext.client),
     ...getAccountingTools(tenantContext.client),
     ...(EXPERIMENTAL_BANKING_ENABLED ? getBankingTools(tenantContext.client) : {}),
+    // v2 tools are registered unconditionally here. A v1-only tenant calling a
+    // v2 tool will reach the client, which surfaces the "HOLDED_API_KEY_V2 not
+    // configured" config error from buildHeaders instead of "Unknown tool".
+    ...getTeamTools(tenantContext.client),
+    ...getLedgerTools(tenantContext.client),
+    ...getTreasuryV2Tools(tenantContext.client),
   };
 
   const tool = tenantTools[name as keyof typeof tenantTools];
