@@ -1,3 +1,31 @@
+# [2.0.0](https://github.com/nubiia-dev/mcp-holded/compare/v1.8.0...v2.0.0) (2026-07-06)
+
+
+* feat!: migrate all tools to Holded API v2 (2.0.0) ([#93](https://github.com/nubiia-dev/mcp-holded/issues/93)) ([2993f49](https://github.com/nubiia-dev/mcp-holded/commit/2993f49a9adc2afe195dbe38292a9324f9de7e15))
+
+
+### BREAKING CHANGES
+
+* HOLDED_API_KEY must now be a Holded API v2 key
+(pat_/sk_live_). Pagination arguments changed from page/pageSize to
+limit/cursor. purchaserefund supports creation only. Experimental
+banking tools were removed in favor of official treasury endpoints.
+
+* docs: note removal of default field projections in migration guide
+
+* fix: merge payment on bank link and read snake_case v2 fields in document verifications
+
+- pay_document bankId step now GETs /payments/{id} before PUT to preserve
+  existing amount/date/contactId (read-then-merge, same pattern as update_payment)
+- pay_document resolves payment id from payments_detail and payments fallbacks
+  in addition to paymentsDetail (snake_case v2 compat)
+- create_document numbering-series override check now probes invoice_num,
+  doc_number and document_number in addition to camelCase fields
+- Tests: verify PUT body contains merged fields; snake_case payments_detail
+  resolves bankId link; snake_case document_number triggers override warning
+
+Refs: feat/holded-api-v2-migration
+
 # [1.8.0](https://github.com/nubiia-dev/mcp-holded/compare/v1.7.0...v1.8.0) (2026-07-06)
 
 
