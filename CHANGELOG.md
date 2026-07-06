@@ -1,3 +1,10 @@
+# [1.8.0](https://github.com/nubiia-dev/mcp-holded/compare/v1.7.0...v1.8.0) (2026-07-06)
+
+
+### Features
+
+* add Holded API v2 support (Team/HR, ledger, treasury) ([#84](https://github.com/nubiia-dev/mcp-holded/issues/84)) ([a0c064c](https://github.com/nubiia-dev/mcp-holded/commit/a0c064cb3a4bf360bb7f7dee4e5f7fd27c91fdaa))
+
 # [1.7.0](https://github.com/nubiia-dev/mcp-holded/compare/v1.6.0...v1.7.0) (2026-06-28)
 
 
