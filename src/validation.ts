@@ -92,7 +92,7 @@ export const updateContactSchema = contactIdSchema.merge(createContactSchema.par
 
 export const contactAttachmentSchema = z.object({
   contactId: z.string().min(1),
-  attachmentId: z.string().min(1),
+  filename: z.string().min(1),
 });
 
 /**
@@ -337,8 +337,14 @@ export const productImageSchema = z.object({
 
 export const updateProductStockSchema = z.object({
   productId: z.string().min(1),
-  warehouseId: z.string().optional(),
-  units: z.number().int(),
+  /** Warehouse ID — required in v2 (v2 rejects stock updates without it). */
+  warehouse_id: z.string().min(1),
+  /** Stock delta (positive to add, negative to subtract). Replaces v1 `units`. */
+  stock_variation: z.number(),
+  /** Optional variant ID to target a specific product variant. */
+  variant_id: z.string().optional(),
+  /** Optional audit note describing the stock adjustment. */
+  description: z.string().optional(),
 });
 
 // Treasury schemas
@@ -371,7 +377,8 @@ export const updateWarehouseSchema = warehouseIdSchema.merge(createWarehouseSche
 
 export const warehouseStockSchema = warehouseIdSchema
   .merge(paginationSchema)
-  .merge(fieldFilteringSchema);
+  .merge(fieldFilteringSchema)
+  .merge(z.object({ cursor: z.string().optional() }));
 
 // Service schemas
 export const serviceIdSchema = z.object({
@@ -453,18 +460,26 @@ const isoDateSchema = z
   );
 
 export const listProjectTimesSchema = z.object({
-  /** Restrict results to entries on or after this date (inclusive). */
-  startDate: isoDateSchema.optional(),
-  /** Restrict results to entries on or before this date (inclusive). */
-  endDate: isoDateSchema.optional(),
-  /** When true, keep only approved entries (`approved === 1`). */
-  approvedOnly: z.boolean().optional(),
   /**
-   * When true, return a flat array of time entries (each enriched with its
-   * project id/name) instead of the nested per-project structure. Convenient
-   * for summing hours across a month.
+   * Restrict results to entries on or after this date (inclusive).
+   * Applied client-side on the returned cursor page (v2 does not expose this
+   * as a confirmed query parameter for /project-times).
    */
-  flatten: z.boolean().optional(),
+  startDate: isoDateSchema.optional(),
+  /**
+   * Restrict results to entries on or before this date (inclusive).
+   * Applied client-side on the returned cursor page.
+   */
+  endDate: isoDateSchema.optional(),
+  /**
+   * When true, keep only approved entries (`approved === 1`).
+   * Applied client-side on the returned cursor page.
+   */
+  approvedOnly: z.boolean().optional(),
+  /** Max items per cursor page (v2 default: 50). */
+  limit: z.number().int().positive().optional(),
+  /** Cursor token from a previous response `nextCursor`. */
+  cursor: z.string().optional(),
 });
 
 export const projectTimesSchema = z
@@ -480,48 +495,32 @@ export const projectTimeIdSchema = z.object({
 
 // Accounting (read-only) schemas
 //
-// The accounting API works in Unix-second timestamps. The daily ledger rejects
-// ranges longer than one year server-side (HTTP 400 "Maximum 1 year between
-// start and end"); we validate that client-side to fail fast with a clear error.
+// get_daily_ledger now targets the Holded API v2 (`/ledger-entries`), which
+// requires ISO date strings (`start_date`, `end_date`) rather than Unix
+// timestamps. For backward compatibility the schema also accepts the legacy
+// `starttmp`/`endtmp` fields (Unix seconds); the tool layer converts them via
+// `toIsoDate`. At least one form of each bound must be supplied — the v2
+// endpoint returns 422 without both dates.
 
-/** Maximum span the daily-ledger endpoint accepts, in seconds (~1 leap year). */
-const MAX_LEDGER_RANGE_SECONDS = 366 * 24 * 60 * 60;
-
-export const dailyLedgerSchema = z
-  .object({
-    /** Range start as a Unix timestamp (seconds). */
-    starttmp: z.number().int().nonnegative(),
-    /** Range end as a Unix timestamp (seconds). */
-    endtmp: z.number().int().nonnegative(),
-    /**
-     * When true, group ledger lines by `entryNumber` so each returned object is
-     * a full double-entry journal entry (asiento) with its lines nested.
-     */
-    groupByEntry: z.boolean().optional(),
-  })
-  .refine((v) => v.endtmp >= v.starttmp, {
-    message: 'endtmp must be greater than or equal to starttmp',
-    path: ['endtmp'],
-  })
-  .refine((v) => v.endtmp - v.starttmp <= MAX_LEDGER_RANGE_SECONDS, {
-    message: 'Date range must not exceed 1 year (Holded rejects longer spans)',
-    path: ['endtmp'],
-  });
-
-// Banking (EXPERIMENTAL — undocumented internal API) schemas
-//
-// Bank-feed reconciliation lives on Holded's internal API
-// (`/internal/banking/...`), which is not part of the public contract. These
-// schemas exist so the experimental tool validates its identifiers, but the
-// endpoint itself is unverified — see `src/tools/banking.ts`.
-
-export const reconcileBankTransactionSchema = z.object({
-  /** Holded bank account id (the bank-feed account, not a treasury id). */
-  accountId: z.string().min(1),
-  /** Bank-feed transaction id to reconcile. */
-  transactionId: z.string().min(1),
-  /** Optional accounting entry / document id to match the transaction against. */
-  entryId: z.string().min(1).optional(),
+export const dailyLedgerSchema = z.object({
+  /** Range start as an ISO 8601 date string (YYYY-MM-DD), e.g. "2025-01-01". Primary form for v2. */
+  start_date: z.string().optional(),
+  /** Range end as an ISO 8601 date string (YYYY-MM-DD), e.g. "2025-12-31". Primary form for v2. */
+  end_date: z.string().optional(),
+  /** Range start as a Unix timestamp in seconds (legacy backward-compat form). Converted to ISO. */
+  starttmp: z.number().optional(),
+  /** Range end as a Unix timestamp in seconds (legacy backward-compat form). Converted to ISO. */
+  endtmp: z.number().optional(),
+  /**
+   * When true, group ledger lines by `entryNumber` so each returned object is
+   * a full double-entry journal entry (asiento) with its lines nested
+   * (page-scoped — applies only to items on the current cursor page).
+   */
+  groupByEntry: z.boolean().optional(),
+  /** Max items per cursor page (v2 default: 50, max: 100). */
+  limit: z.number().int().positive().optional(),
+  /** Cursor token from a previous response `nextCursor`. */
+  cursor: z.string().optional(),
 });
 
 /**
