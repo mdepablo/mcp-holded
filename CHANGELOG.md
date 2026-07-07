@@ -1,3 +1,10 @@
+## [2.0.2](https://github.com/nubiia-dev/mcp-holded/compare/v2.0.1...v2.0.2) (2026-07-07)
+
+
+### Bug Fixes
+
+* map document write bodies to v2 snake_case fields and detect 200-with-error responses ([#95](https://github.com/nubiia-dev/mcp-holded/issues/95)) ([f4882c0](https://github.com/nubiia-dev/mcp-holded/commit/f4882c0b793b2bca959e04d046aad01305f22694))
+
 ## [2.0.1](https://github.com/nubiia-dev/mcp-holded/compare/v2.0.0...v2.0.1) (2026-07-06)
 
 
