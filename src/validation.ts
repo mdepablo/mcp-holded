@@ -493,6 +493,141 @@ export const projectTimeIdSchema = z.object({
   timeTrackingId: z.string().min(1),
 });
 
+/**
+ * Writable fields of a project time entry (`POST/PUT /projects/{id}/times`).
+ * `duration` is in seconds; `hours` is a convenience alternative converted by
+ * the tool layer.
+ */
+const projectTimeFieldsSchema = z.object({
+  duration: z.number().int().positive().optional(),
+  hours: z.number().positive().optional(),
+  userId: z.string().min(1).optional(),
+  description: z.string().nullable().optional(),
+  date: isoDateSchema.nullable().optional(),
+  taskId: z.string().min(1).nullable().optional(),
+  costPerHour: z.string().nullable().optional(),
+  category: z.string().nullable().optional(),
+});
+
+export const createProjectTimeSchema = z
+  .object({ projectId: z.string().min(1) })
+  .merge(projectTimeFieldsSchema)
+  .refine((v) => v.duration !== undefined || v.hours !== undefined, {
+    message: 'Either duration (seconds) or hours is required',
+    path: ['duration'],
+  });
+
+export const updateProjectTimeSchema = projectTimeIdSchema.merge(projectTimeFieldsSchema);
+
+// Projects & tasks (Projects API v2) schemas
+
+export const projectStatusFilterEnum = z.enum([
+  'active',
+  'in_progress',
+  'completed',
+  'cancelled',
+  'waiting',
+  'budgeted',
+]);
+
+export const listProjectsSchema = z.object({
+  status: projectStatusFilterEnum.optional(),
+  limit: z.number().int().positive().max(200).optional(),
+  cursor: z.string().optional(),
+});
+
+export const projectIdSchema = z.object({
+  projectId: z.string().min(1),
+});
+
+export const createProjectSchema = z.object({
+  name: z.string().min(1),
+  description: z.string().nullable().optional(),
+  dueDate: isoDateSchema.nullable().optional(),
+  contactId: z.string().min(1).nullable().optional(),
+});
+
+export const updateProjectSchema = projectIdSchema.extend({
+  name: z.string().min(1).optional(),
+  description: z.string().nullable().optional(),
+  dueDate: isoDateSchema.nullable().optional(),
+  startDate: isoDateSchema.nullable().optional(),
+  contactId: z.string().min(1).nullable().optional(),
+  status: z.number().int().min(0).max(4).nullable().optional(),
+  billable: z.boolean().nullable().optional(),
+  tags: z.array(z.string()).nullable().optional(),
+  allowNotifications: z.boolean().nullable().optional(),
+});
+
+export const listTasksSchema = z.object({
+  projectId: z.string().min(1).optional(),
+  limit: z.number().int().positive().max(200).optional(),
+  cursor: z.string().optional(),
+});
+
+export const taskIdSchema = z.object({
+  taskId: z.string().min(1),
+});
+
+const taskFieldsSchema = z.object({
+  description: z.string().nullable().optional(),
+  dueDate: isoDateSchema.nullable().optional(),
+  priority: z.number().int().nullable().optional(),
+  status: z.string().nullable().optional(),
+  assignedTo: z.array(z.string()).nullable().optional(),
+});
+
+export const createTaskSchema = taskFieldsSchema.extend({
+  projectId: z.string().min(1),
+  name: z.string().min(1),
+});
+
+export const updateTaskSchema = taskFieldsSchema.merge(taskIdSchema).extend({
+  projectId: z.string().min(1).optional(),
+  name: z.string().min(1).optional(),
+});
+
+// Employee time tracking (Team API v2) schemas
+
+/** Local date-time without timezone, e.g. `2026-03-01T09:00:00` (what Holded expects). */
+const localDateTimeSchema = z
+  .string()
+  .regex(
+    /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2})?$/,
+    'Must be a local date-time without timezone, e.g. 2026-03-01T09:00:00'
+  );
+
+const geoSchema = z.object({
+  latitude: z.number().min(-90).max(90).nullable().optional(),
+  longitude: z.number().min(-180).max(180).nullable().optional(),
+});
+
+export const clockActionSchema = z.object({ employeeId: z.string().min(1) }).merge(geoSchema);
+
+export const listEmployeeTimesSchema = z.object({
+  employeeId: z.string().min(1).optional(),
+  startDate: isoDateSchema.optional(),
+  endDate: isoDateSchema.optional(),
+  limit: z.number().int().positive().max(200).optional(),
+  cursor: z.string().optional(),
+});
+
+const employeeTimeFieldsSchema = z.object({
+  startAt: localDateTimeSchema,
+  endAt: localDateTimeSchema,
+  pauses: z
+    .array(z.object({ startAt: localDateTimeSchema, endAt: localDateTimeSchema }))
+    .optional(),
+});
+
+export const createEmployeeTimeSchema = employeeTimeFieldsSchema.extend({
+  employeeId: z.string().min(1),
+});
+
+export const updateEmployeeTimeSchema = employeeTimeFieldsSchema.extend({
+  timeId: z.string().min(1),
+});
+
 // Accounting (read-only) schemas
 //
 // get_daily_ledger now targets the Holded API v2 (`/ledger-entries`), which

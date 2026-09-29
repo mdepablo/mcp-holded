@@ -49,33 +49,98 @@ describe('Team Tools — time tracking', () => {
     tools = getTeamTools(client);
   });
 
-  it('clock_in_employee posts to the clock-in action', async () => {
+  it('clock_in_employee posts to the clock-in action without a body', async () => {
     await tools.clock_in_employee.handler({ employeeId: 'e1' });
+    expect(client.post).toHaveBeenCalledWith('/employees/e1/clock-in', undefined);
   });
 
-  it('clock_out_employee posts to the clock-out action', async () => {
-    await tools.clock_out_employee.handler({ employeeId: 'e1' });
+  it('clock_out_employee sends the optional geolocation', async () => {
+    await tools.clock_out_employee.handler({ employeeId: 'e1', latitude: 41.39, longitude: 2.17 });
+    expect(client.post).toHaveBeenCalledWith('/employees/e1/clock-out', {
+      latitude: 41.39,
+      longitude: 2.17,
+    });
+  });
+
+  it('pause/unpause_employee post to their actions', async () => {
+    await tools.pause_employee.handler({ employeeId: 'e1' });
+    await tools.unpause_employee.handler({ employeeId: 'e1' });
+    expect(client.post).toHaveBeenCalledWith('/employees/e1/pause', undefined);
+    expect(client.post).toHaveBeenCalledWith('/employees/e1/unpause', undefined);
   });
 
   it('list_employee_times lists globally by default', async () => {
     (client.get as any).mockResolvedValue([]);
     await tools.list_employee_times.handler({});
+    expect(client.get).toHaveBeenCalledWith('/employee-times', {});
   });
 
-  it('list_employee_times scopes to one employee when employeeId is given', async () => {
+  it('list_employee_times sends date filters server-side when scoped to an employee', async () => {
     (client.get as any).mockResolvedValue([]);
-    await tools.list_employee_times.handler({ employeeId: 'e1', limit: 5 });
+    await tools.list_employee_times.handler({
+      employeeId: 'e1',
+      limit: 5,
+      startDate: '2026-09-01',
+      endDate: '2026-09-30',
+    });
+    expect(client.get).toHaveBeenCalledWith('/employees/e1/times', {
+      limit: 5,
+      startDate: '2026-09-01',
+      endDate: '2026-09-30',
+    });
   });
 
-  it('create_employee_time posts the record under the employee', async () => {
-    const data = { start: '2026-07-01T09:00:00Z', end: '2026-07-01T17:00:00Z' };
-    await tools.create_employee_time.handler({ employeeId: 'e1', data });
+  it('list_employee_times filters the global list client-side by day', async () => {
+    (client.get as any).mockResolvedValue({
+      items: [
+        { id: 'a', start_at: '2026-09-01T09:00:00' },
+        { id: 'b', start_at: '2026-09-15T09:00:00' },
+      ],
+      has_more: false,
+    });
+    const result = await tools.list_employee_times.handler({ startDate: '2026-09-10' });
+    expect(client.get).toHaveBeenCalledWith('/employee-times', {});
+    expect(result.items).toEqual([{ id: 'b', start_at: '2026-09-15T09:00:00' }]);
+  });
+
+  it('create_employee_time maps fields and pauses to snake_case', async () => {
+    await tools.create_employee_time.handler({
+      employeeId: 'e1',
+      startAt: '2026-07-01T09:00:00',
+      endAt: '2026-07-01T17:00:00',
+      pauses: [{ startAt: '2026-07-01T14:00:00', endAt: '2026-07-01T15:00:00' }],
+    });
+    expect(client.post).toHaveBeenCalledWith('/employees/e1/times', {
+      start_at: '2026-07-01T09:00:00',
+      end_at: '2026-07-01T17:00:00',
+      pauses: [{ start_at: '2026-07-01T14:00:00', end_at: '2026-07-01T15:00:00' }],
+    });
+  });
+
+  it('create_employee_time rejects date-times with timezone', async () => {
+    await expect(
+      tools.create_employee_time.handler({
+        employeeId: 'e1',
+        startAt: '2026-07-01T09:00:00Z',
+        endAt: '2026-07-01T17:00:00Z',
+      })
+    ).rejects.toThrow(/Validation error/);
+    expect(client.post).not.toHaveBeenCalled();
   });
 
   it('update/delete_employee_time address the time record directly', async () => {
-    await tools.update_employee_time.handler({ timeId: 't1', data: { note: 'x' } });
+    await tools.update_employee_time.handler({
+      timeId: 't1',
+      startAt: '2026-07-01T08:00:00',
+      endAt: '2026-07-01T16:00:00',
+    });
+    expect(client.put).toHaveBeenCalledWith('/employee-times/t1', {
+      start_at: '2026-07-01T08:00:00',
+      end_at: '2026-07-01T16:00:00',
+    });
 
     await tools.delete_employee_time.handler({ timeId: 't1' });
+    expect(client.delete).toHaveBeenCalledWith('/employee-times/t1');
   });
 });
 

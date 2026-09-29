@@ -7,24 +7,7 @@ import { CallToolRequestSchema, ListToolsRequestSchema } from '@modelcontextprot
 import { RateLimiter } from './utils/rate-limiter.js';
 import { TenantManager, extractTenantId } from './utils/tenant-context.js';
 import { loadTenantConfigs, validateTenantConfigs } from './utils/tenant-config.js';
-import { getDocumentTools } from './tools/documents.js';
-import { getContactTools } from './tools/contacts.js';
-import { getProductTools } from './tools/products.js';
-import { getTreasuryTools } from './tools/treasuries.js';
-import { getExpensesAccountTools } from './tools/expenses-accounts.js';
-import { getNumberingSeriesTools } from './tools/numbering-series.js';
-import { getSalesChannelTools } from './tools/sales-channels.js';
-import { getPaymentTools } from './tools/payments.js';
-import { getTaxTools } from './tools/taxes.js';
-import { getContactGroupTools } from './tools/contact-groups.js';
-import { getRemittanceTools } from './tools/remittances.js';
-import { getServiceTools } from './tools/services.js';
-import { getWarehouseTools } from './tools/warehouses.js';
-import { getTimeTrackingTools } from './tools/time-tracking.js';
-import { getAccountingTools } from './tools/accounting.js';
-import { getTeamTools } from './tools/team.js';
-import { getLedgerTools } from './tools/ledger.js';
-import { getTreasuryV2Tools } from './tools/treasury-v2.js';
+import { buildTools, loadToolSelection } from './tools/registry.js';
 
 // Initialize multi-tenancy support
 const tenantConfigs = loadTenantConfigs();
@@ -81,30 +64,15 @@ const rateLimiter = new RateLimiter({
     delete_service: { maxRequests: 10, windowMs: 60000 },
     delete_warehouse: { maxRequests: 10, windowMs: 60000 },
     delete_product: { maxRequests: 10, windowMs: 60000 },
+    delete_project: { maxRequests: 10, windowMs: 60000 },
+    delete_task: { maxRequests: 10, windowMs: 60000 },
+    delete_project_time: { maxRequests: 10, windowMs: 60000 },
   },
 });
 
-// Collect all tools (all registered unconditionally — the client is always v2)
-const allTools = {
-  ...getDocumentTools(client),
-  ...getContactTools(client),
-  ...getProductTools(client),
-  ...getTreasuryTools(client),
-  ...getExpensesAccountTools(client),
-  ...getNumberingSeriesTools(client),
-  ...getSalesChannelTools(client),
-  ...getPaymentTools(client),
-  ...getTaxTools(client),
-  ...getContactGroupTools(client),
-  ...getRemittanceTools(client),
-  ...getServiceTools(client),
-  ...getWarehouseTools(client),
-  ...getTimeTrackingTools(client),
-  ...getAccountingTools(client),
-  ...getTeamTools(client),
-  ...getLedgerTools(client),
-  ...getTreasuryV2Tools(client),
-};
+// Tool selection (HOLDED_MODULES / HOLDED_READ_ONLY) applies to every tenant
+const toolSelection = loadToolSelection();
+const allTools = buildTools(client, toolSelection);
 
 // Create server
 const server = new Server(
@@ -126,6 +94,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
       name,
       description: tool.description,
       inputSchema: tool.inputSchema,
+      annotations: { readOnlyHint: tool.readOnlyHint === true },
     })),
   };
 });
@@ -174,28 +143,9 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
   }
 
   // Get tools with tenant-specific client
-  const tenantTools = {
-    ...getDocumentTools(tenantContext.client),
-    ...getContactTools(tenantContext.client),
-    ...getProductTools(tenantContext.client),
-    ...getTreasuryTools(tenantContext.client),
-    ...getExpensesAccountTools(tenantContext.client),
-    ...getNumberingSeriesTools(tenantContext.client),
-    ...getSalesChannelTools(tenantContext.client),
-    ...getPaymentTools(tenantContext.client),
-    ...getTaxTools(tenantContext.client),
-    ...getContactGroupTools(tenantContext.client),
-    ...getRemittanceTools(tenantContext.client),
-    ...getServiceTools(tenantContext.client),
-    ...getWarehouseTools(tenantContext.client),
-    ...getTimeTrackingTools(tenantContext.client),
-    ...getAccountingTools(tenantContext.client),
-    ...getTeamTools(tenantContext.client),
-    ...getLedgerTools(tenantContext.client),
-    ...getTreasuryV2Tools(tenantContext.client),
-  };
+  const tenantTools = buildTools(tenantContext.client, toolSelection);
 
-  const tool = tenantTools[name as keyof typeof tenantTools];
+  const tool = tenantTools[name];
   if (!tool) {
     throw new Error(`Unknown tool: ${name}`);
   }

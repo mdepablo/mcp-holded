@@ -85,6 +85,27 @@ export TENANT_2_API_KEY=sk_live_key_for_company_b
 
 `TENANT_N_API_KEY_V2` is accepted as an alias for `TENANT_N_API_KEY` (wins if both are set).
 
+### Tool selection
+
+Exposing every tool makes the model choose among 140+ tools. Two optional variables narrow it down:
+
+| Variable | Default | Effect |
+|---|---|---|
+| `HOLDED_MODULES` | all | Comma-separated modules to load, e.g. `projects,time-tracking,team` |
+| `HOLDED_READ_ONLY` | `false` | `true` hides every write/destructive tool |
+
+Available modules: `documents`, `contacts`, `products`, `treasuries`, `expenses-accounts`, `numbering-series`, `sales-channels`, `payments`, `taxes`, `contact-groups`, `remittances`, `services`, `warehouses`, `projects`, `time-tracking`, `accounting`, `team`, `ledger`, `treasury-v2`. An unknown name makes the server fail at startup.
+
+Projects & time tracking setup:
+
+```bash
+export HOLDED_MODULES=projects,time-tracking,team
+```
+
+- `projects`: projects (list/get/summary/create/update/delete) and tasks (list/get/create/update/delete).
+- `time-tracking`: hours logged against projects (list/get/create/update/delete). `create_project_time` accepts `duration` (seconds) or `hours` (decimal).
+- `team`: employees, clock-in/out, pauses and working-time records (`startAt`/`endAt` as local date-times without timezone, e.g. `2026-03-01T09:00:00`).
+
 ### Claude Desktop Configuration
 
 Add to your Claude Desktop config file:

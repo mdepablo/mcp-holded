@@ -1,7 +1,68 @@
 import { HoldedClient } from '../holded-client.js';
 import { normalizeV2List, cursorParams } from '../utils/v2-pagination.js';
+import { compactBody } from '../utils/body.js';
+import {
+  clockActionSchema,
+  createEmployeeTimeSchema,
+  listEmployeeTimesSchema,
+  updateEmployeeTimeSchema,
+  withValidation,
+} from '../validation.js';
 
 const DOC_URL = 'https://www.holded.com/es/desarrolladores/referencia-api';
+
+const CLOCK_INPUT_SCHEMA = {
+  type: 'object' as const,
+  properties: {
+    employeeId: { type: 'string', description: 'Employee ID' },
+    latitude: { type: 'number', description: 'Optional latitude of the clocking location' },
+    longitude: { type: 'number', description: 'Optional longitude of the clocking location' },
+  },
+  required: ['employeeId'],
+};
+
+const EMPLOYEE_TIME_INPUT_PROPERTIES = {
+  startAt: { type: 'string', description: 'Start, local date-time e.g. 2026-03-01T09:00:00' },
+  endAt: { type: 'string', description: 'End, local date-time e.g. 2026-03-01T17:00:00' },
+  pauses: {
+    type: 'array',
+    description: 'Optional pauses within the record',
+    items: {
+      type: 'object',
+      properties: {
+        startAt: { type: 'string', description: 'Pause start, e.g. 2026-03-01T14:00:00' },
+        endAt: { type: 'string', description: 'Pause end, e.g. 2026-03-01T15:00:00' },
+      },
+      required: ['startAt', 'endAt'],
+    },
+  },
+};
+
+type ClockAction = 'clock-in' | 'clock-out' | 'pause' | 'unpause';
+
+function clockAction(
+  client: HoldedClient,
+  action: ClockAction,
+  args: { employeeId: string; latitude?: number | null; longitude?: number | null }
+) {
+  const body = compactBody({ latitude: args.latitude, longitude: args.longitude });
+  return client.post(
+    `/employees/${args.employeeId}/${action}`,
+    Object.keys(body).length > 0 ? body : undefined
+  );
+}
+
+function employeeTimeBody(args: {
+  startAt: string;
+  endAt: string;
+  pauses?: Array<{ startAt: string; endAt: string }>;
+}): Record<string, unknown> {
+  return compactBody({
+    start_at: args.startAt,
+    end_at: args.endAt,
+    pauses: args.pauses?.map((pause) => ({ start_at: pause.startAt, end_at: pause.endAt })),
+  });
+}
 
 /**
  * Team & HR tools backed by the Holded API v2 (Bearer auth, cursor
@@ -118,73 +179,92 @@ export function getTeamTools(client: HoldedClient) {
 
     clock_in_employee: {
       description:
-        'WRITE: registers a clock-in for an employee in Holded time tracking (API v2). Affects real working-time records.',
-      inputSchema: {
-        type: 'object' as const,
-        properties: { employeeId: { type: 'string', description: 'Employee ID' } },
-        required: ['employeeId'],
-      },
-      handler: async (args: { employeeId: string }) =>
-        client.post(`/employees/${args.employeeId}/clock-in`, undefined),
+        'WRITE: registers a clock-in (fichar entrada) for an employee in Holded time tracking (API v2). Affects real working-time records.',
+      inputSchema: CLOCK_INPUT_SCHEMA,
+      handler: withValidation(clockActionSchema, async (args) =>
+        clockAction(client, 'clock-in', args)
+      ),
     },
 
     clock_out_employee: {
-      description: 'WRITE: registers a clock-out for an employee in Holded time tracking (API v2).',
-      inputSchema: {
-        type: 'object' as const,
-        properties: { employeeId: { type: 'string', description: 'Employee ID' } },
-        required: ['employeeId'],
-      },
-      handler: async (args: { employeeId: string }) =>
-        client.post(`/employees/${args.employeeId}/clock-out`, undefined),
+      description:
+        'WRITE: registers a clock-out (fichar salida) for an employee in Holded time tracking (API v2).',
+      inputSchema: CLOCK_INPUT_SCHEMA,
+      handler: withValidation(clockActionSchema, async (args) =>
+        clockAction(client, 'clock-out', args)
+      ),
     },
 
     pause_employee: {
       description:
         'WRITE: starts a pause in the current working session of an employee (Holded API v2).',
-      inputSchema: {
-        type: 'object' as const,
-        properties: { employeeId: { type: 'string', description: 'Employee ID' } },
-        required: ['employeeId'],
-      },
-      handler: async (args: { employeeId: string }) =>
-        client.post(`/employees/${args.employeeId}/pause`, undefined),
+      inputSchema: CLOCK_INPUT_SCHEMA,
+      handler: withValidation(clockActionSchema, async (args) =>
+        clockAction(client, 'pause', args)
+      ),
     },
 
     unpause_employee: {
       description: 'WRITE: ends the current pause of an employee working session (Holded API v2).',
-      inputSchema: {
-        type: 'object' as const,
-        properties: { employeeId: { type: 'string', description: 'Employee ID' } },
-        required: ['employeeId'],
-      },
-      handler: async (args: { employeeId: string }) =>
-        client.post(`/employees/${args.employeeId}/unpause`, undefined),
+      inputSchema: CLOCK_INPUT_SCHEMA,
+      handler: withValidation(clockActionSchema, async (args) =>
+        clockAction(client, 'unpause', args)
+      ),
     },
 
     list_employee_times: {
       description:
-        'List time-tracking records (Holded API v2). Without `employeeId` lists all records (/employee-times); with `employeeId` lists only that employee (/employees/{id}/times). Cursor-paginated.',
+        'List employee working-time records (fichajes / jornada) (Holded API v2). Without `employeeId` lists all records (/employee-times); with `employeeId` lists only that employee (/employees/{id}/times). Cursor-paginated. ' +
+        'Each record has id, employee_id, employee_name, date, start_at, end_at, duration (seconds), status (running|done) and approval fields. ' +
+        'startDate/endDate are server-side filters when `employeeId` is given; otherwise they are applied client-side on the returned page.',
       inputSchema: {
         type: 'object' as const,
         properties: {
           employeeId: { type: 'string', description: 'Optional employee ID to scope the list' },
-          limit: { type: 'number', description: 'Max items per page' },
+          startDate: { type: 'string', description: 'Only records from this day (YYYY-MM-DD)' },
+          endDate: {
+            type: 'string',
+            description: 'Only records up to this day (YYYY-MM-DD, inclusive)',
+          },
+          limit: { type: 'integer', description: 'Max items per page (default 50, max 200)' },
           cursor: { type: 'string', description: 'Cursor from a previous response nextCursor' },
         },
         required: [],
       },
       readOnlyHint: true,
-      handler: async (args: { employeeId?: string; limit?: number; cursor?: string } = {}) => {
-        const endpoint = args.employeeId
-          ? `/employees/${args.employeeId}/times`
-          : '/employee-times';
-        return normalizeV2List(await client.get(endpoint, cursorParams(args)));
-      },
+      handler: withValidation(listEmployeeTimesSchema, async (args) => {
+        const params = cursorParams(args);
+        if (args.employeeId) {
+          if (args.startDate) {
+            params.startDate = args.startDate;
+          }
+          if (args.endDate) {
+            params.endDate = args.endDate;
+          }
+          return normalizeV2List(await client.get(`/employees/${args.employeeId}/times`, params));
+        }
+        const normalized = normalizeV2List(await client.get('/employee-times', params));
+        if (!args.startDate && !args.endDate) {
+          return normalized;
+        }
+        return {
+          ...normalized,
+          items: normalized.items.filter((item) => {
+            const record = item as { date?: string | null; start_at?: string | null };
+            const day = (record.date ?? record.start_at ?? '').slice(0, 10);
+            if (!day) {
+              return true;
+            }
+            return (
+              (!args.startDate || day >= args.startDate) && (!args.endDate || day <= args.endDate)
+            );
+          }),
+        };
+      }),
     },
 
     get_employee_time: {
-      description: 'Get a single time-tracking record by ID (Holded API v2).',
+      description: 'Get a single employee working-time record by ID (Holded API v2).',
       inputSchema: {
         type: 'object' as const,
         properties: { timeId: { type: 'string', description: 'Time record ID' } },
@@ -197,39 +277,41 @@ export function getTeamTools(client: HoldedClient) {
 
     create_employee_time: {
       description:
-        `WRITE: creates a manual time-tracking record for an employee (Holded API v2). ` +
-        `\`data\` is sent verbatim as the request body — see ${DOC_URL} (Control horario → Crear registro).`,
+        'WRITE: creates a manual working-time record (jornada) for an employee (Holded API v2). ' +
+        'Times are LOCAL date-times without timezone, e.g. 2026-03-01T09:00:00. Returns { id }.',
       inputSchema: {
         type: 'object' as const,
         properties: {
           employeeId: { type: 'string', description: 'Employee ID' },
-          data: { type: 'object', description: 'Time record payload, sent verbatim as body' },
+          ...EMPLOYEE_TIME_INPUT_PROPERTIES,
         },
-        required: ['employeeId', 'data'],
+        required: ['employeeId', 'startAt', 'endAt'],
       },
-      handler: async (args: { employeeId: string; data: Record<string, unknown> }) =>
-        client.post(`/employees/${args.employeeId}/times`, args.data),
+      handler: withValidation(createEmployeeTimeSchema, async (args) =>
+        client.post(`/employees/${args.employeeId}/times`, employeeTimeBody(args))
+      ),
     },
 
     update_employee_time: {
       description:
-        `WRITE: updates a time-tracking record (Holded API v2). ` +
-        `\`data\` is sent verbatim as the request body — see ${DOC_URL} (Control horario → Actualizar).`,
+        'WRITE: replaces the start/end (and pauses) of an employee working-time record (Holded API v2). ' +
+        'Times are LOCAL date-times without timezone, e.g. 2026-03-01T09:00:00.',
       inputSchema: {
         type: 'object' as const,
         properties: {
           timeId: { type: 'string', description: 'Time record ID' },
-          data: { type: 'object', description: 'Fields to update, sent verbatim as body' },
+          ...EMPLOYEE_TIME_INPUT_PROPERTIES,
         },
-        required: ['timeId', 'data'],
+        required: ['timeId', 'startAt', 'endAt'],
       },
-      handler: async (args: { timeId: string; data: Record<string, unknown> }) =>
-        client.put(`/employee-times/${args.timeId}`, args.data),
+      handler: withValidation(updateEmployeeTimeSchema, async (args) =>
+        client.put(`/employee-times/${args.timeId}`, employeeTimeBody(args))
+      ),
     },
 
     delete_employee_time: {
       description:
-        'DESTRUCTIVE: permanently deletes a time-tracking record in Holded (API v2). This cannot be undone.',
+        'DESTRUCTIVE: permanently deletes an employee working-time record in Holded (API v2). This cannot be undone.',
       inputSchema: {
         type: 'object' as const,
         properties: { timeId: { type: 'string', description: 'Time record ID' } },
