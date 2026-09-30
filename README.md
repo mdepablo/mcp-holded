@@ -94,7 +94,9 @@ Exposing every tool makes the model choose among 140+ tools. Two optional variab
 | `HOLDED_MODULES` | all | Comma-separated modules to load, e.g. `projects,time-tracking,team` |
 | `HOLDED_READ_ONLY` | `false` | `true` hides every write/destructive tool |
 
-Available modules: `documents`, `contacts`, `products`, `treasuries`, `expenses-accounts`, `numbering-series`, `sales-channels`, `payments`, `taxes`, `contact-groups`, `remittances`, `services`, `warehouses`, `projects`, `time-tracking`, `accounting`, `team`, `ledger`, `treasury-v2`. An unknown name makes the server fail at startup.
+Available modules: `documents`, `contacts`, `contacts-safe`, `products`, `treasuries`, `expenses-accounts`, `numbering-series`, `sales-channels`, `payments`, `taxes`, `contact-groups`, `remittances`, `services`, `warehouses`, `projects`, `time-tracking`, `accounting`, `team`, `ledger`, `treasury-v2`. An unknown name makes the server fail at startup.
+
+For agents that need a restricted customer directory, use `HOLDED_MODULES=contacts-safe` and `HOLDED_READ_ONLY=true`. This exposes only `list_client_directory`, which returns a fixed allowlist (`id`, name, trade name, contact type, person/company flag, tax IDs, billing address fields, and the client accounting code from `client_record.num`). It omits bank details, email/phone, notes, custom fields, payment settings, contact persons, shipping addresses, attachments, and all unrecognized API fields. Do not enable the regular `contacts` module alongside it when the agent must not see those fields.
 
 Projects & time tracking setup:
 

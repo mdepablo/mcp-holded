@@ -30,6 +30,17 @@ describe('tool registry', () => {
     expect(tools).not.toHaveProperty('list_employees');
   });
 
+  it('exposes only the safe contact directory when contacts-safe is selected', () => {
+    const selection = loadToolSelection({
+      HOLDED_MODULES: 'contacts-safe',
+      HOLDED_READ_ONLY: 'true',
+    });
+    const tools = buildTools(client, selection);
+
+    expect(Object.keys(tools)).toEqual(['list_client_directory']);
+    expect(tools.list_client_directory.readOnlyHint).toBe(true);
+  });
+
   it('rejects unknown module names', () => {
     expect(() => loadToolSelection({ HOLDED_MODULES: 'projects,proyectos' })).toThrow(
       /Unknown HOLDED_MODULES entries: proyectos/

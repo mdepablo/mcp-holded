@@ -18,6 +18,7 @@ import { getTeamTools } from './team.js';
 import { getLedgerTools } from './ledger.js';
 import { getTreasuryV2Tools } from './treasury-v2.js';
 import { getProjectTools } from './projects.js';
+import { getSafeContactTools } from './contacts-safe.js';
 
 export interface ToolDefinition {
   description: string;
@@ -32,6 +33,7 @@ export type ToolSet = Record<string, ToolDefinition>;
 export const TOOL_MODULES: Record<string, (client: HoldedClient) => ToolSet> = {
   documents: getDocumentTools,
   contacts: getContactTools,
+  'contacts-safe': getSafeContactTools,
   products: getProductTools,
   treasuries: getTreasuryTools,
   'expenses-accounts': getExpensesAccountTools,
