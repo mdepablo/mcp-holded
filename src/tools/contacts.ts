@@ -8,6 +8,35 @@ import {
   withValidation,
 } from '../validation.js';
 
+function toContactApiPayload(
+  args: object,
+  includeContactPersons: boolean
+): Record<string, unknown> {
+  const { billAddress, tradename, contactPersons, ...payload } = args as Record<string, unknown>;
+  const body = payload;
+  delete body.contactId;
+
+  if (billAddress && body.bill_address === undefined) {
+    const address = billAddress as Record<string, unknown>;
+    const { postalCode, countryCode, ...apiAddress } = address;
+    body.bill_address = {
+      ...apiAddress,
+      ...(postalCode === undefined ? {} : { postal_code: postalCode }),
+      ...(countryCode === undefined ? {} : { country_code: countryCode }),
+    };
+  }
+
+  if (tradename !== undefined && body.trade_name === undefined) {
+    body.trade_name = tradename;
+  }
+
+  if (includeContactPersons && contactPersons !== undefined && body.contact_persons === undefined) {
+    body.contact_persons = contactPersons;
+  }
+
+  return body;
+}
+
 export function getContactTools(client: HoldedClient) {
   return {
     // List Contacts
@@ -86,10 +115,29 @@ export function getContactTools(client: HoldedClient) {
             type: 'string',
             description: 'Contact phone number',
           },
+          mobile: {
+            type: 'string',
+            description: 'Contact mobile number',
+          },
+          website: {
+            type: 'string',
+            description: 'Contact website URL',
+          },
           code: {
             type: 'string',
-            description:
-              'NIF / CIF / VAT number or tax identification code for the contact. This is the correct Holded API field for tax IDs. Note: the legacy "vatnumber" field does not exist in Holded and is silently ignored.',
+            description: 'Holded internal reference code for the contact',
+          },
+          vat_number: {
+            type: 'string',
+            description: 'Tax identification number (NIF/CIF/VAT)',
+          },
+          trade_name: {
+            type: 'string',
+            description: 'Trade name',
+          },
+          is_person: {
+            type: 'boolean',
+            description: 'True for a natural person; false for a company',
           },
           type: {
             type: 'string',
@@ -98,44 +146,34 @@ export function getContactTools(client: HoldedClient) {
           },
           billAddress: {
             type: 'object',
-            description: 'Billing address',
+            description: 'Legacy camelCase alias for bill_address',
             properties: {
               address: { type: 'string' },
               city: { type: 'string' },
               postalCode: { type: 'string' },
+              postal_code: { type: 'string' },
               province: { type: 'string' },
               country: { type: 'string' },
+              countryCode: { type: 'string' },
+              country_code: { type: 'string' },
+              info: { type: 'string' },
             },
           },
           tradename: {
             type: 'string',
-            description: 'Trade name',
+            description: 'Legacy alias for trade_name',
           },
-          note: {
-            type: 'string',
-            description: 'Notes about the contact',
-          },
-          contactPersons: {
-            type: 'array',
-            description: 'List of contact persons associated with this contact',
-            items: {
-              type: 'object',
-              properties: {
-                name: {
-                  type: 'string',
-                  description: 'Contact person name (required)',
-                },
-                phone: {
-                  type: 'string',
-                  description: 'Contact person phone number',
-                },
-                email: {
-                  type: 'string',
-                  format: 'email',
-                  description: 'Contact person email address',
-                },
-              },
-              required: ['name'],
+          bill_address: {
+            type: 'object',
+            description: 'Billing address using Holded API field names',
+            properties: {
+              address: { type: 'string' },
+              city: { type: 'string' },
+              postal_code: { type: 'string' },
+              province: { type: 'string' },
+              country: { type: 'string' },
+              country_code: { type: 'string' },
+              info: { type: 'string' },
             },
           },
         },
@@ -143,7 +181,7 @@ export function getContactTools(client: HoldedClient) {
       },
       destructiveHint: true,
       handler: withValidation(createContactSchema, async (args) => {
-        return client.post('/contacts', args);
+        return client.post('/contacts', toContactApiPayload(args, false));
       }),
     },
 
@@ -188,10 +226,29 @@ export function getContactTools(client: HoldedClient) {
             type: 'string',
             description: 'Contact phone number',
           },
+          mobile: {
+            type: 'string',
+            description: 'Contact mobile number',
+          },
+          website: {
+            type: 'string',
+            description: 'Contact website URL',
+          },
           code: {
             type: 'string',
-            description:
-              'NIF / CIF / VAT number or tax identification code for the contact. This is the correct Holded API field for tax IDs. Note: the legacy "vatnumber" field does not exist in Holded and is silently ignored.',
+            description: 'Holded internal reference code for the contact',
+          },
+          vat_number: {
+            type: 'string',
+            description: 'Tax identification number (NIF/CIF/VAT)',
+          },
+          trade_name: {
+            type: 'string',
+            description: 'Trade name',
+          },
+          is_person: {
+            type: 'boolean',
+            description: 'True for a natural person; false for a company',
           },
           type: {
             type: 'string',
@@ -200,42 +257,58 @@ export function getContactTools(client: HoldedClient) {
           },
           billAddress: {
             type: 'object',
-            description: 'Billing address',
+            description: 'Legacy camelCase alias for bill_address',
             properties: {
               address: { type: 'string' },
               city: { type: 'string' },
               postalCode: { type: 'string' },
+              postal_code: { type: 'string' },
               province: { type: 'string' },
               country: { type: 'string' },
+              countryCode: { type: 'string' },
+              country_code: { type: 'string' },
+              info: { type: 'string' },
             },
           },
           tradename: {
             type: 'string',
-            description: 'Trade name',
+            description: 'Legacy alias for trade_name',
           },
-          note: {
-            type: 'string',
-            description: 'Notes about the contact',
+          bill_address: {
+            type: 'object',
+            description: 'Billing address using Holded API field names',
+            properties: {
+              address: { type: 'string' },
+              city: { type: 'string' },
+              postal_code: { type: 'string' },
+              province: { type: 'string' },
+              country: { type: 'string' },
+              country_code: { type: 'string' },
+              info: { type: 'string' },
+            },
           },
-          contactPersons: {
+          contact_persons: {
             type: 'array',
-            description: 'List of contact persons associated with this contact',
+            description: 'Contact persons associated with the contact',
             items: {
               type: 'object',
               properties: {
-                name: {
-                  type: 'string',
-                  description: 'Contact person name (required)',
-                },
-                phone: {
-                  type: 'string',
-                  description: 'Contact person phone number',
-                },
-                email: {
-                  type: 'string',
-                  format: 'email',
-                  description: 'Contact person email address',
-                },
+                name: { type: 'string' },
+                phone: { type: 'string' },
+                email: { type: 'string', format: 'email' },
+              },
+              required: ['name'],
+            },
+          },
+          contactPersons: {
+            type: 'array',
+            description: 'Legacy camelCase alias for contact_persons',
+            items: {
+              type: 'object',
+              properties: {
+                name: { type: 'string' },
+                phone: { type: 'string' },
+                email: { type: 'string', format: 'email' },
               },
               required: ['name'],
             },
@@ -245,8 +318,8 @@ export function getContactTools(client: HoldedClient) {
       },
       destructiveHint: true,
       handler: withValidation(updateContactSchema, async (args) => {
-        const { contactId, ...body } = args;
-        return client.put(`/contacts/${contactId}`, body);
+        const { contactId } = args;
+        return client.put(`/contacts/${contactId}`, toContactApiPayload(args, true));
       }),
     },
 

@@ -70,23 +70,40 @@ describe('Product Tools', () => {
   });
 
   describe('create_product', () => {
-    it('should create a product with required fields (v2)', async () => {
-      await tools.create_product.handler({ name: 'Test Product' });
+    it('requires the fields required by Holded v2', () => {
+      expect(tools.create_product.inputSchema.required).toEqual(
+        expect.arrayContaining(['name', 'kind', 'has_stock', 'for_sale', 'for_purchase'])
+      );
+      expect((tools.create_product.inputSchema.properties as any).kind.enum).toEqual([
+        'simple',
+        'lots',
+        'pack',
+        'variants',
+        'serialnumbers',
+      ]);
     });
 
-    it('should include optional fields', async () => {
+    it('maps product fields to the Holded v2 request body', async () => {
       const args = {
         name: 'Test Product',
+        kind: 'simple' as const,
         sku: 'SKU-001',
         barcode: '1234567890',
         price: 99.99,
-        costPrice: 50,
-        tax: 21,
+        cost: 50,
+        taxes: ['s_iva_21'],
         description: 'A test product',
         stock: 100,
-        kind: 'product' as const,
+        has_stock: true,
+        for_sale: true,
+        for_purchase: false,
       };
       await tools.create_product.handler(args);
+      expect(client.post).toHaveBeenCalledWith('/products', {
+        ...args,
+        price: '99.99',
+        cost: '50',
+      });
     });
   });
 
@@ -106,7 +123,7 @@ describe('Product Tools', () => {
       await tools.update_product.handler(args);
       expect(client.put).toHaveBeenCalledWith('/products/product-123', {
         name: 'Updated Product',
-        price: 149.99,
+        price: '149.99',
       });
     });
   });

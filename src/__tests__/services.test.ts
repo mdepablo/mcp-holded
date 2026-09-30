@@ -52,12 +52,21 @@ describe('Service Tools', () => {
     it('should include optional fields', async () => {
       const args = {
         name: 'Consulting',
-        sku: 'SRV-001',
+        code: 'SRV-001',
         price: 150,
         tax: 21,
         description: 'Professional consulting services',
       };
       await tools.create_service.handler(args);
+      expect(client.post).toHaveBeenCalledWith('/services', args);
+    });
+
+    it('maps the legacy sku input to Holded service code', async () => {
+      await tools.create_service.handler({ name: 'Consulting', sku: 'SRV-002' });
+      expect(client.post).toHaveBeenCalledWith('/services', {
+        name: 'Consulting',
+        code: 'SRV-002',
+      });
     });
   });
 
@@ -79,6 +88,11 @@ describe('Service Tools', () => {
         name: 'Updated Service',
         price: 200,
       });
+    });
+
+    it('maps the legacy sku input to Holded service code', async () => {
+      await tools.update_service.handler({ serviceId: 'service-123', sku: 'SRV-002' });
+      expect(client.put).toHaveBeenCalledWith('/services/service-123', { code: 'SRV-002' });
     });
 
     describe('delete_service', () => {

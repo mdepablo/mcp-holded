@@ -72,28 +72,60 @@ export function getServiceTools(client: HoldedClient) {
             type: 'string',
             description: 'Service name',
           },
+          code: {
+            type: 'string',
+            description: 'Holded service reference code',
+          },
           sku: {
             type: 'string',
-            description: 'Service SKU',
+            description: 'Legacy alias for Holded service code',
           },
           price: {
             type: 'number',
             description: 'Service price',
           },
+          cost: {
+            type: 'number',
+            description: 'Service cost price',
+          },
           tax: {
             type: 'number',
             description: 'Tax percentage',
           },
+          taxes: {
+            type: 'array',
+            items: { type: 'string' },
+            description: 'Holded tax identifiers applied to the service',
+          },
+          tags: {
+            type: 'array',
+            items: { type: 'string' },
+            description: 'Service tags',
+          },
+          sales_channel_id: {
+            type: 'string',
+            description: 'Sales channel identifier',
+          },
           description: {
             type: 'string',
             description: 'Service description',
+          },
+          color: {
+            type: 'string',
+            description: 'Service color in hexadecimal format',
+          },
+          duration: {
+            type: 'number',
+            description: 'Service duration in minutes',
           },
         },
         required: ['name'],
       },
       destructiveHint: true,
       handler: withValidation(createServiceSchema, async (args) => {
-        return client.post('/services', args);
+        const { sku, ...body } = args;
+        if (body.code === undefined && sku !== undefined) body.code = sku;
+        return client.post('/services', body);
       }),
     },
 
@@ -130,28 +162,59 @@ export function getServiceTools(client: HoldedClient) {
             type: 'string',
             description: 'Service name',
           },
+          code: {
+            type: 'string',
+            description: 'Holded service reference code',
+          },
           sku: {
             type: 'string',
-            description: 'Service SKU',
+            description: 'Legacy alias for Holded service code',
           },
           price: {
             type: 'number',
             description: 'Service price',
           },
+          cost: {
+            type: 'number',
+            description: 'Service cost price',
+          },
           tax: {
             type: 'number',
             description: 'Tax percentage',
           },
+          taxes: {
+            type: 'array',
+            items: { type: 'string' },
+            description: 'Holded tax identifiers applied to the service',
+          },
+          tags: {
+            type: 'array',
+            items: { type: 'string' },
+            description: 'Service tags',
+          },
+          sales_channel_id: {
+            type: 'string',
+            description: 'Sales channel identifier',
+          },
           description: {
             type: 'string',
             description: 'Service description',
+          },
+          color: {
+            type: 'string',
+            description: 'Service color in hexadecimal format',
+          },
+          duration: {
+            type: 'number',
+            description: 'Service duration in minutes',
           },
         },
         required: ['serviceId'],
       },
       destructiveHint: true,
       handler: withValidation(updateServiceSchema, async (args) => {
-        const { serviceId, ...body } = args;
+        const { serviceId, sku, ...body } = args;
+        if (body.code === undefined && sku !== undefined) body.code = sku;
         return client.put(`/services/${serviceId}`, body);
       }),
     },

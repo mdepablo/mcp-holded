@@ -3,6 +3,7 @@ import { normalizeV2List, cursorParams } from '../utils/v2-pagination.js';
 import {
   productIdSchema,
   createProductSchema,
+  productKindSchema,
   updateProductSchema,
   productImageSchema,
   updateProductStockSchema,
@@ -71,7 +72,9 @@ export function getProductTools(client: HoldedClient) {
 
     // Create Product
     create_product: {
-      description: 'Create a new product (Holded API v2)',
+      description:
+        'Create a new product (Holded API v2). kind must be a Holded product kind; ' +
+        'has_stock, for_sale, and for_purchase are required by the API.',
       inputSchema: {
         type: 'object' as const,
         properties: {
@@ -91,13 +94,23 @@ export function getProductTools(client: HoldedClient) {
             type: 'number',
             description: 'Product price',
           },
+          cost: {
+            type: 'number',
+            description: 'Product unit cost price',
+          },
           costPrice: {
             type: 'number',
-            description: 'Cost price',
+            description: 'Legacy alias for cost',
           },
-          tax: {
-            type: 'number',
-            description: 'Tax percentage',
+          taxes: {
+            type: 'array',
+            items: { type: 'string' },
+            description: 'Holded tax keys or names applied to this product',
+          },
+          tags: {
+            type: 'array',
+            items: { type: 'string' },
+            description: 'Product tags',
           },
           description: {
             type: 'string',
@@ -107,17 +120,53 @@ export function getProductTools(client: HoldedClient) {
             type: 'number',
             description: 'Initial stock quantity',
           },
+          weight: {
+            type: 'number',
+            description: 'Product weight in the account default unit',
+          },
+          has_stock: {
+            type: 'boolean',
+            description: 'Whether stock tracking is enabled',
+          },
+          for_sale: {
+            type: 'boolean',
+            description: 'Whether the product is available for sale',
+          },
+          for_purchase: {
+            type: 'boolean',
+            description: 'Whether the product is available for purchase',
+          },
+          warehouse_id: {
+            type: 'string',
+            description: 'Default warehouse identifier',
+          },
+          sales_channel_id: {
+            type: 'string',
+            description: 'Sales channel identifier',
+          },
+          exp_account_id: {
+            type: 'string',
+            description: 'Expense/purchases accounting account identifier',
+          },
           kind: {
             type: 'string',
-            enum: ['product', 'service'],
-            description: 'Product kind',
+            enum: productKindSchema.options,
+            description: 'Holded product kind',
           },
         },
-        required: ['name'],
+        required: ['name', 'kind', 'has_stock', 'for_sale', 'for_purchase'],
       },
       destructiveHint: true,
       handler: withValidation(createProductSchema, async (args) => {
-        return client.post('/products', args);
+        const { costPrice, ...body } = args;
+        const apiBody: Record<string, unknown> = { ...body };
+
+        if (body.price !== undefined) apiBody.price = String(body.price);
+
+        const cost = body.cost ?? costPrice;
+        if (cost !== undefined) apiBody.cost = String(cost);
+
+        return client.post('/products', apiBody);
       }),
     },
 
@@ -166,25 +215,66 @@ export function getProductTools(client: HoldedClient) {
             type: 'number',
             description: 'Product price',
           },
+          cost: {
+            type: 'number',
+            description: 'Product unit cost price',
+          },
           costPrice: {
             type: 'number',
-            description: 'Cost price',
+            description: 'Legacy alias for cost',
           },
-          tax: {
-            type: 'number',
-            description: 'Tax percentage',
+          taxes: {
+            type: 'array',
+            items: { type: 'string' },
+            description: 'Holded tax keys or names applied to this product',
+          },
+          tags: {
+            type: 'array',
+            items: { type: 'string' },
+            description: 'Product tags',
           },
           description: {
             type: 'string',
             description: 'Product description',
+          },
+          for_sale: {
+            type: 'boolean',
+            description: 'Whether the product is available for sale',
+          },
+          for_purchase: {
+            type: 'boolean',
+            description: 'Whether the product is available for purchase',
+          },
+          archived: {
+            type: 'boolean',
+            description: 'Whether the product is archived',
+          },
+          warehouse_id: {
+            type: 'string',
+            description: 'Default warehouse identifier',
+          },
+          sales_channel_id: {
+            type: 'string',
+            description: 'Sales channel identifier',
+          },
+          exp_account_id: {
+            type: 'string',
+            description: 'Expense/purchases accounting account identifier',
           },
         },
         required: ['productId'],
       },
       destructiveHint: true,
       handler: withValidation(updateProductSchema, async (args) => {
-        const { productId, ...body } = args;
-        return client.put(`/products/${productId}`, body);
+        const { productId, costPrice, ...body } = args;
+        const apiBody: Record<string, unknown> = { ...body };
+
+        if (body.price !== undefined) apiBody.price = String(body.price);
+
+        const cost = body.cost ?? costPrice;
+        if (cost !== undefined) apiBody.cost = String(cost);
+
+        return client.put(`/products/${productId}`, apiBody);
       }),
     },
 

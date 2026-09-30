@@ -59,36 +59,49 @@ export const contactPersonSchema = z.object({
   email: z.string().email().optional(),
 });
 
-export const createContactSchema = z.object({
-  name: z.string().min(1),
-  email: z.string().email().optional(),
-  phone: z.string().optional(),
-  /**
-   * NIF/CIF/VAT identifier for the contact. This is the correct Holded API field
-   * for tax identification numbers. The legacy `vatnumber` field does not exist in
-   * the Holded API and is silently ignored — use `code` instead.
-   */
-  code: z.string().optional(),
-  type: z.enum(['client', 'supplier', 'lead', 'debtor', 'creditor']).optional(),
-  billAddress: z
-    .object({
-      address: z.string().optional(),
-      city: z.string().optional(),
-      postalCode: z.string().optional(),
-      province: z.string().optional(),
-      country: z.string().optional(),
-    })
-    .optional(),
-  tradename: z.string().optional(),
-  note: z.string().optional(),
-  /**
-   * List of contact persons associated with this contact.
-   * Each person requires a name; phone and email are optional.
-   */
-  contactPersons: z.array(contactPersonSchema).optional(),
+const contactAddressSchema = z.object({
+  address: z.string().optional(),
+  city: z.string().optional(),
+  postal_code: z.string().optional(),
+  postalCode: z.string().optional(),
+  province: z.string().optional(),
+  country: z.string().optional(),
+  country_code: z.string().optional(),
+  countryCode: z.string().optional(),
+  info: z.string().optional(),
 });
 
-export const updateContactSchema = contactIdSchema.merge(createContactSchema.partial());
+export const createContactSchema = z
+  .object({
+    name: z.string().min(1),
+    email: z.string().email().optional(),
+    phone: z.string().optional(),
+    mobile: z.string().optional(),
+    website: z.string().optional(),
+    /** Holded's internal reference code for the contact. */
+    code: z.string().optional(),
+    /** Tax identification number (NIF/CIF/VAT). */
+    vat_number: z.string().optional(),
+    trade_name: z.string().optional(),
+    /** Legacy alias for `trade_name`. */
+    tradename: z.string().optional(),
+    /** True for a natural person; false for a company. */
+    is_person: z.boolean().optional(),
+    type: z.enum(['client', 'supplier', 'lead', 'debtor', 'creditor']).optional(),
+    bill_address: contactAddressSchema.optional(),
+    /** Legacy camelCase alias for `bill_address`. */
+    billAddress: contactAddressSchema.optional(),
+  })
+  .strict();
+
+export const updateContactSchema = contactIdSchema
+  .merge(createContactSchema.partial())
+  .extend({
+    contact_persons: z.array(contactPersonSchema).optional(),
+    /** Legacy camelCase alias for `contact_persons`. */
+    contactPersons: z.array(contactPersonSchema).optional(),
+  })
+  .strict();
 
 export const contactAttachmentSchema = z.object({
   contactId: z.string().min(1),
@@ -314,21 +327,54 @@ export const productIdSchema = z.object({
   productId: z.string().min(1),
 });
 
-export const createProductSchema = z.object({
-  name: z.string().min(1),
-  sku: z.string().optional(),
-  barcode: z.string().optional(),
-  price: z.number().nonnegative().optional(),
-  cost: z.number().nonnegative().optional(),
-  costPrice: z.number().nonnegative().optional(),
-  tax: z.number().min(0).max(100).optional(),
-  description: z.string().optional(),
-  unit: z.string().optional(),
-  stock: z.number().optional(),
-  kind: z.enum(['product', 'service']).optional(),
-});
+export const productKindSchema = z.enum(['simple', 'lots', 'pack', 'variants', 'serialnumbers']);
 
-export const updateProductSchema = productIdSchema.merge(createProductSchema.partial());
+export const createProductSchema = z
+  .object({
+    name: z.string().min(1),
+    kind: productKindSchema,
+    sku: z.string().optional(),
+    barcode: z.string().optional(),
+    price: z.number().nonnegative().optional(),
+    cost: z.number().nonnegative().optional(),
+    /** Legacy alias for `cost`. */
+    costPrice: z.number().nonnegative().optional(),
+    taxes: z.array(z.string()).optional(),
+    tags: z.array(z.string()).optional(),
+    description: z.string().optional(),
+    stock: z.number().optional(),
+    weight: z.number().optional(),
+    has_stock: z.boolean(),
+    for_sale: z.boolean(),
+    for_purchase: z.boolean(),
+    warehouse_id: z.string().optional(),
+    sales_channel_id: z.string().optional(),
+    exp_account_id: z.string().optional(),
+  })
+  .strict();
+
+export const updateProductSchema = productIdSchema.merge(
+  z
+    .object({
+      name: z.string().min(1).optional(),
+      sku: z.string().optional(),
+      barcode: z.string().optional(),
+      price: z.number().nonnegative().optional(),
+      cost: z.number().nonnegative().optional(),
+      /** Legacy alias for `cost`. */
+      costPrice: z.number().nonnegative().optional(),
+      taxes: z.array(z.string()).optional(),
+      tags: z.array(z.string()).optional(),
+      description: z.string().optional(),
+      for_sale: z.boolean().optional(),
+      for_purchase: z.boolean().optional(),
+      archived: z.boolean().optional(),
+      warehouse_id: z.string().optional(),
+      sales_channel_id: z.string().optional(),
+      exp_account_id: z.string().optional(),
+    })
+    .strict()
+);
 
 export const productImageSchema = z.object({
   productId: z.string().min(1),
@@ -385,13 +431,23 @@ export const serviceIdSchema = z.object({
   serviceId: z.string().min(1),
 });
 
-export const createServiceSchema = z.object({
-  name: z.string().min(1),
-  sku: z.string().optional(),
-  price: z.number().nonnegative().optional(),
-  tax: z.number().min(0).max(100).optional(),
-  description: z.string().optional(),
-});
+export const createServiceSchema = z
+  .object({
+    name: z.string().min(1),
+    code: z.string().optional(),
+    /** Legacy alias for Holded's `code` field. */
+    sku: z.string().optional(),
+    price: z.number().nonnegative().optional(),
+    cost: z.number().nonnegative().optional(),
+    tax: z.number().min(0).max(100).optional(),
+    taxes: z.array(z.string()).optional(),
+    tags: z.array(z.string()).optional(),
+    sales_channel_id: z.string().optional(),
+    description: z.string().optional(),
+    color: z.string().optional(),
+    duration: z.number().nonnegative().optional(),
+  })
+  .strict();
 
 export const updateServiceSchema = serviceIdSchema.merge(createServiceSchema.partial());
 

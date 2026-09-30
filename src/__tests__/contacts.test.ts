@@ -74,23 +74,40 @@ describe('Contact Tools', () => {
       await tools.create_contact.handler({ name: 'Test Contact' });
     });
 
-    it('should include optional fields including code (NIF/CIF/VAT)', async () => {
+    it('should include reference code and tax identification number separately', async () => {
       const args = {
         name: 'Test Contact',
         email: 'test@example.com',
         phone: '+34600000000',
-        code: 'B12345678',
+        code: 'CLIENT-001',
+        vat_number: 'B12345678',
         type: 'client' as const,
       };
       await tools.create_contact.handler(args);
+      expect(client.post).toHaveBeenCalledWith('/contacts', args);
     });
 
-    it('should use code field for NIF/CIF/VAT (not vatnumber)', async () => {
-      const args = { name: 'Empresa SL', code: 'B98765432' };
+    it('should send is_person so companies are not created as individuals', async () => {
+      await tools.create_contact.handler({
+        name: 'Button Technologies (TEST)',
+        type: 'client',
+        is_person: false,
+      });
+      expect(client.post).toHaveBeenCalledWith('/contacts', {
+        name: 'Button Technologies (TEST)',
+        type: 'client',
+        is_person: false,
+      });
+      expect((tools.create_contact.inputSchema.properties as any).is_person.type).toBe('boolean');
+    });
+
+    it('should use vat_number for NIF/CIF and code for the internal reference', async () => {
+      const args = { name: 'Empresa SL', code: 'CLIENT-002', vat_number: 'B98765432' };
       await tools.create_contact.handler(args);
       const callArgs = (client.post as ReturnType<typeof vi.fn>).mock.calls[0][1];
       expect(callArgs).not.toHaveProperty('vatnumber');
-      expect(callArgs).toHaveProperty('code', 'B98765432');
+      expect(callArgs).toHaveProperty('code', 'CLIENT-002');
+      expect(callArgs).toHaveProperty('vat_number', 'B98765432');
     });
 
     it('should include billing address', async () => {
@@ -104,52 +121,51 @@ describe('Contact Tools', () => {
         },
       };
       await tools.create_contact.handler(args);
+      expect(client.post).toHaveBeenCalledWith('/contacts', {
+        name: 'Test Contact',
+        bill_address: {
+          address: 'Calle Test 123',
+          city: 'Madrid',
+          postal_code: '28001',
+          country: 'ES',
+        },
+      });
     });
 
-    it('should include contactPersons when provided', async () => {
-      const args = {
-        name: 'Empresa SL',
-        contactPersons: [
-          { name: 'Ana García', phone: '+34600000001', email: 'ana@empresa.com' },
-          { name: 'Luis Pérez' },
-        ],
-      };
-      await tools.create_contact.handler(args);
-    });
-
-    it('should reject contactPersons entries missing required name', async () => {
+    it('should reject contact persons on create because Holded does not accept them there', async () => {
       await expect(
         tools.create_contact.handler({
           name: 'Empresa SL',
+          contactPersons: [{ name: 'Ana García' }],
+        })
+      ).rejects.toThrow();
+    });
+
+    it('should reject contact person entries missing a name on update', async () => {
+      await expect(
+        tools.update_contact.handler({
+          contactId: 'contact-123',
           contactPersons: [{ phone: '+34600000001' } as any],
         })
       ).rejects.toThrow();
     });
 
-    it('should reject invalid email format in contactPersons', async () => {
+    it('should reject invalid email format in contact persons on update', async () => {
       await expect(
-        tools.create_contact.handler({
-          name: 'Empresa SL',
+        tools.update_contact.handler({
+          contactId: 'contact-123',
           contactPersons: [{ name: 'Ana García', email: 'not-a-valid-email' }],
         })
       ).rejects.toThrow();
     });
 
-    it('should accept valid email format in contactPersons', async () => {
-      const args = {
-        name: 'Empresa SL',
-        contactPersons: [{ name: 'Ana García', email: 'ana@empresa.com' }],
-      };
-      await tools.create_contact.handler(args);
-    });
-
-    it('contactPersons email field should have format: email in inputSchema', () => {
-      const contactPersonsItems = (tools.create_contact.inputSchema.properties as any)
-        .contactPersons.items;
+    it('contact_persons email field should have format: email in update inputSchema', () => {
+      const contactPersonsItems = (tools.update_contact.inputSchema.properties as any)
+        .contact_persons.items;
       expect(contactPersonsItems.properties.email.format).toBe('email');
     });
 
-    it('should create contact without contactPersons (field is optional)', async () => {
+    it('should create a contact without contact persons', async () => {
       const args = { name: 'Solo Contact', email: 'solo@example.com' };
       await tools.create_contact.handler(args);
     });
@@ -175,9 +191,16 @@ describe('Contact Tools', () => {
       });
     });
 
-    it('should update the code field (NIF/CIF/VAT) correctly', async () => {
-      await tools.update_contact.handler({ contactId: 'contact-123', code: 'A12345678' });
-      expect(client.put).toHaveBeenCalledWith('/contacts/contact-123', { code: 'A12345678' });
+    it('should update the internal code and tax identification number separately', async () => {
+      await tools.update_contact.handler({
+        contactId: 'contact-123',
+        code: 'CLIENT-003',
+        vat_number: 'A12345678',
+      });
+      expect(client.put).toHaveBeenCalledWith('/contacts/contact-123', {
+        code: 'CLIENT-003',
+        vat_number: 'A12345678',
+      });
     });
 
     it('should update contactPersons', async () => {
@@ -187,8 +210,13 @@ describe('Contact Tools', () => {
       };
       await tools.update_contact.handler(args);
       expect(client.put).toHaveBeenCalledWith('/contacts/contact-123', {
-        contactPersons: [{ name: 'Maria López', email: 'maria@empresa.com' }],
+        contact_persons: [{ name: 'Maria López', email: 'maria@empresa.com' }],
       });
+    });
+
+    it('should allow correcting whether a contact represents a person or company', async () => {
+      await tools.update_contact.handler({ contactId: 'contact-123', is_person: false });
+      expect(client.put).toHaveBeenCalledWith('/contacts/contact-123', { is_person: false });
     });
   });
 
